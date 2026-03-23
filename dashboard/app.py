@@ -354,6 +354,193 @@ with tab1:
         st.subheader("📋 Predictions Summary")
         st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
 
+        st.divider()
+        st.subheader("🎛️ Manual Sensor Input")
+        st.write("Simulate real-time monitoring by entering sensor values manually.")
+
+        with st.expander("🎛️ Enter Sensor Values Manually", expanded=False):
+            st.markdown("**Default values simulate poor bridge health conditions:**")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.markdown("**⚙️ Structural**")
+                Strain_microstrain = st.number_input(
+                    "Strain_microstrain", value=450.0, step=0.1, key="m_strain"
+                )
+                Deflection_mm = st.number_input(
+                    "Deflection_mm", value=18.0, step=0.1, key="m_deflection"
+                )
+                Crack_Propagation_mm = st.number_input(
+                    "Crack_Propagation_mm", value=3.5, step=0.1, key="m_crack"
+                )
+                Corrosion_Level_percent = st.number_input(
+                    "Corrosion_Level_percent",
+                    value=45.0,
+                    step=0.1,
+                    key="m_corrosion",
+                )
+                Displacement_mm = st.number_input(
+                    "Displacement_mm", value=12.0, step=0.1, key="m_displacement"
+                )
+
+                st.markdown("**📳 Dynamic**")
+                Vibration_ms2 = st.number_input(
+                    "Vibration_ms2", value=4.5, step=0.1, key="m_vibration"
+                )
+                Tilt_deg = st.number_input(
+                    "Tilt_deg", value=2.8, step=0.1, key="m_tilt"
+                )
+                Modal_Frequency_Hz = st.number_input(
+                    "Modal_Frequency_Hz", value=6.0, step=0.1, key="m_modal"
+                )
+                Seismic_Activity_ms2 = st.number_input(
+                    "Seismic_Activity_ms2", value=0.08, step=0.01, key="m_seismic"
+                )
+                Bearing_Joint_Forces_kN = st.number_input(
+                    "Bearing_Joint_Forces_kN", value=520.0, step=0.1, key="m_bearing"
+                )
+
+            with col2:
+                st.markdown("**🚛 Load**")
+                Vehicle_Load_tons = st.number_input(
+                    "Vehicle_Load_tons", value=38.0, step=0.1, key="m_vehicle"
+                )
+                Traffic_Volume_vph = st.number_input(
+                    "Traffic_Volume_vph", value=1800.0, step=1.0, key="m_traffic"
+                )
+                Axle_Counts_pmin = st.number_input(
+                    "Axle_Counts_pmin", value=85.0, step=0.1, key="m_axle"
+                )
+                Impact_Events_g = st.number_input(
+                    "Impact_Events_g", value=2.1, step=0.1, key="m_impact"
+                )
+                Dynamic_Load_Distribution_percent = st.number_input(
+                    "Dynamic_Load_Distribution_percent",
+                    value=88.0,
+                    step=0.1,
+                    key="m_dynload",
+                )
+
+                st.markdown("**🌤️ Environmental**")
+                Temperature_C = st.number_input(
+                    "Temperature_C", value=42.0, step=0.1, key="m_temp"
+                )
+                Humidity_percent = st.number_input(
+                    "Humidity_percent", value=95.0, step=0.1, key="m_humidity"
+                )
+                Wind_Speed_ms = st.number_input(
+                    "Wind_Speed_ms", value=28.0, step=0.1, key="m_wind"
+                )
+                Precipitation_mmh = st.number_input(
+                    "Precipitation_mmh", value=18.0, step=0.1, key="m_precip"
+                )
+                Water_Level_m = st.number_input(
+                    "Water_Level_m", value=7.5, step=0.1, key="m_water"
+                )
+
+            with col3:
+                st.markdown("**💗 Health**")
+                Structural_Health_Index_SHI = st.number_input(
+                    "Structural_Health_Index_SHI",
+                    value=22.0,
+                    step=0.1,
+                    key="m_shi",
+                )
+                Fatigue_Accumulation_au = st.number_input(
+                    "Fatigue_Accumulation_au", value=0.92, step=0.01, key="m_fatigue"
+                )
+                Anomaly_Detection_Score = st.number_input(
+                    "Anomaly_Detection_Score",
+                    value=0.88,
+                    step=0.01,
+                    key="m_anomaly",
+                )
+                Energy_Dissipation_au = st.number_input(
+                    "Energy_Dissipation_au", value=0.95, step=0.01, key="m_energy"
+                )
+                Acoustic_Emissions_levels = st.number_input(
+                    "Acoustic_Emissions_levels",
+                    value=95.0,
+                    step=0.1,
+                    key="m_acoustic",
+                )
+
+            if st.button("🔍 Run Prediction on Manual Input", key="manual_predict_btn"):
+                manual_row = np.array(
+                    [[
+                        Strain_microstrain, Deflection_mm, Crack_Propagation_mm,
+                        Corrosion_Level_percent, Displacement_mm,
+                        Vibration_ms2, Tilt_deg, Modal_Frequency_Hz,
+                        Seismic_Activity_ms2, Bearing_Joint_Forces_kN,
+                        Vehicle_Load_tons, Traffic_Volume_vph, Axle_Counts_pmin,
+                        Impact_Events_g, Dynamic_Load_Distribution_percent,
+                        Temperature_C, Humidity_percent, Wind_Speed_ms,
+                        Precipitation_mmh, Water_Level_m,
+                        Structural_Health_Index_SHI, Fatigue_Accumulation_au,
+                        Anomaly_Detection_Score, Energy_Dissipation_au,
+                        Acoustic_Emissions_levels,
+                    ]],
+                    dtype=np.float32,
+                )
+
+                with st.spinner("Running GCN prediction..."):
+                    df_full_manual = _load_full_dataset()
+                    scaler_manual = _fit_scaler(df_full_manual)
+                    row_scaled_manual = scaler_manual.transform(manual_row)[0]
+                    pred_manual, conf_manual = _run_gcn(gcn, row_scaled_manual)
+                    shi_manual = float(np.clip(row_scaled_manual[20] * 20.0 + 85.0, 0.0, 100.0))
+                    conf_pct_manual = conf_manual * 100.0
+
+                manual_bridge = draw_bridge_diagram(prediction=pred_manual, confidence=conf_pct_manual)
+                st.pyplot(manual_bridge, use_container_width=True)
+                plt.close()
+
+                left_m, right_m = st.columns(2)
+                with left_m:
+                    if pred_manual == 0:
+                        st.markdown(
+                            f"""<div style="background:#1a7a1a;padding:25px;border-radius:15px;
+                            text-align:center;font-size:32px;color:white;font-weight:bold;
+                            margin:10px 0;">🟢 HEALTHY<br>
+                            <span style="font-size:18px;">Confidence: {conf_pct_manual:.1f}%</span></div>""",
+                            unsafe_allow_html=True,
+                        )
+                        st.success("✅ Bridge is operating within safe parameters.")
+                    else:
+                        st.markdown(
+                            f"""<div style="background:#8b0000;padding:25px;border-radius:15px;
+                            text-align:center;font-size:32px;color:white;font-weight:bold;
+                            margin:10px 0;">🔴 DAMAGED<br>
+                            <span style="font-size:18px;">Confidence: {conf_pct_manual:.1f}%</span></div>""",
+                            unsafe_allow_html=True,
+                        )
+                        st.error("⚠️ Critical Alert: Bridge requires immediate inspection!")
+
+                with right_m:
+                    fig_manual_gauge = go.Figure(
+                        go.Indicator(
+                            mode="gauge+number",
+                            value=Structural_Health_Index_SHI,
+                            title={"text": "Structural Health Index"},
+                            gauge={
+                                "axis": {"range": [0, 100]},
+                                "steps": [
+                                    {"range": [0, 40], "color": "#ff4444"},
+                                    {"range": [40, 70], "color": "#ffaa00"},
+                                    {"range": [70, 100], "color": "#44bb44"},
+                                ],
+                                "threshold": {
+                                    "line": {"color": "black", "width": 4},
+                                    "thickness": 0.75,
+                                    "value": 70,
+                                },
+                            },
+                        )
+                    )
+                    fig_manual_gauge.update_layout(height=260, margin=dict(l=20, r=20, t=50, b=10))
+                    st.plotly_chart(fig_manual_gauge, use_container_width=True, key="manual_gauge")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — SENSOR GRAPH
