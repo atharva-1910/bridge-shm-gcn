@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
@@ -53,6 +55,82 @@ FEATURE_COLS = [
     "Energy_Dissipation_au",
     "Acoustic_Emissions_levels",
 ]
+
+# region agent log
+_DEBUG_LOG_PATH = "/Users/atharva_hemade/Desktop/College/DL/project/.cursor/debug-eadf8e.log"
+_DEBUG_SESSION_ID = "eadf8e"
+_DEBUG_RUN_ID = "ood_manual_fix_debug_1"
+
+def _append_debug_log(hypothesisId: str, location: str, message: str, data: dict | None = None) -> None:
+    payload = {
+        "sessionId": _DEBUG_SESSION_ID,
+        "runId": _DEBUG_RUN_ID,
+        "hypothesisId": hypothesisId,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+    }
+    with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload) + "\n")
+
+# endregion
+
+HEALTHY_THRESHOLDS = {
+    'Strain_microstrain':                {'min': 100, 'max': 200,  'unit': 'με',     'domain': 'Structural'},
+    'Deflection_mm':                     {'min': 3,   'max': 7,    'unit': 'mm',     'domain': 'Structural'},
+    'Crack_Propagation_mm':              {'min': 0,   'max': 0.2,  'unit': 'mm',     'domain': 'Structural'},
+    'Corrosion_Level_percent':           {'min': 0,   'max': 10,   'unit': '%',      'domain': 'Structural'},
+    'Displacement_mm':                   {'min': 1,   'max': 4,    'unit': 'mm',     'domain': 'Structural'},
+    'Vibration_ms2':                     {'min': 0.3, 'max': 0.8,  'unit': 'm/s²',   'domain': 'Dynamic'},
+    'Tilt_deg':                          {'min': 0,   'max': 0.3,  'unit': '°',      'domain': 'Dynamic'},
+    'Modal_Frequency_Hz':                {'min': 12,  'max': 18,   'unit': 'Hz',     'domain': 'Dynamic'},
+    'Seismic_Activity_ms2':              {'min': 0,   'max': 0.02, 'unit': 'm/s²',   'domain': 'Dynamic'},
+    'Bearing_Joint_Forces_kN':           {'min': 150, 'max': 250,  'unit': 'kN',     'domain': 'Dynamic'},
+    'Vehicle_Load_tons':                 {'min': 5,   'max': 15,   'unit': 'tons',   'domain': 'Load'},
+    'Traffic_Volume_vph':                {'min': 200, 'max': 700,  'unit': 'vph',    'domain': 'Load'},
+    'Axle_Counts_pmin':                  {'min': 10,  'max': 30,   'unit': '/min',   'domain': 'Load'},
+    'Impact_Events_g':                   {'min': 0,   'max': 0.5,  'unit': 'g',      'domain': 'Load'},
+    'Dynamic_Load_Distribution_percent': {'min': 40,  'max': 60,   'unit': '%',      'domain': 'Load'},
+    'Temperature_C':                     {'min': 10,  'max': 35,   'unit': '°C',     'domain': 'Environmental'},
+    'Humidity_percent':                  {'min': 40,  'max': 75,   'unit': '%',      'domain': 'Environmental'},
+    'Wind_Speed_ms':                     {'min': 0,   'max': 10,   'unit': 'm/s',    'domain': 'Environmental'},
+    'Precipitation_mmh':                 {'min': 0,   'max': 5,    'unit': 'mm/h',   'domain': 'Environmental'},
+    'Water_Level_m':                     {'min': 1,   'max': 4,    'unit': 'm',      'domain': 'Environmental'},
+    'Structural_Health_Index_SHI':       {'min': 70,  'max': 100,  'unit': 'index',  'domain': 'Health'},
+    'Fatigue_Accumulation_au':           {'min': 0,   'max': 0.3,  'unit': 'au',     'domain': 'Health'},
+    'Anomaly_Detection_Score':           {'min': 0,   'max': 0.2,  'unit': 'score',  'domain': 'Health'},
+    'Energy_Dissipation_au':             {'min': 0.1, 'max': 0.4,  'unit': 'au',     'domain': 'Health'},
+    'Acoustic_Emissions_levels':         {'min': 10,  'max': 30,   'unit': 'dB',     'domain': 'Health'},
+}
+
+MAINTENANCE_ACTIONS = {
+    'Strain_microstrain':                '🔩 Inspect and reinforce primary load-bearing members. Check for overloading.',
+    'Deflection_mm':                     '📐 Assess girder stiffness. Consider load redistribution or temporary weight limits.',
+    'Crack_Propagation_mm':              '🔍 Immediately inspect crack sites. Apply crack sealing or schedule section replacement.',
+    'Corrosion_Level_percent':           '🛡️ Apply anti-corrosion coating. Replace heavily corroded steel sections.',
+    'Displacement_mm':                   '⚓ Inspect bearing supports and foundation. Check for settlement or bearing failure.',
+    'Vibration_ms2':                     '📳 Install additional dampers. Inspect for loose connections causing resonance.',
+    'Tilt_deg':                          '📏 Survey foundation and bearing alignment. Investigate differential settlement.',
+    'Modal_Frequency_Hz':                '🎵 Low frequency indicates stiffness loss. Full structural integrity assessment required.',
+    'Seismic_Activity_ms2':              '🌍 Post-seismic inspection mandatory. Check all connections and foundation.',
+    'Bearing_Joint_Forces_kN':           '⚙️ Inspect bearing pads. Replace worn bearings. Check expansion joints.',
+    'Vehicle_Load_tons':                 '🚛 Enforce weight limits immediately. Install weight monitoring at bridge entry.',
+    'Traffic_Volume_vph':                '🚦 Implement traffic management. Consider alternating lane closures.',
+    'Axle_Counts_pmin':                  '🔄 High axle frequency accelerates fatigue. Reduce speed limits and heavy vehicle frequency.',
+    'Impact_Events_g':                   '⚠️ Repair road surface and expansion joints to reduce impact loads.',
+    'Dynamic_Load_Distribution_percent': '⚖️ Asymmetric loading detected. Reroute heavy traffic to center lanes.',
+    'Temperature_C':                     '🌡️ Monitor thermal expansion joints. Ensure expansion gaps are clear.',
+    'Humidity_percent':                  '💧 Improve drainage. Apply waterproof sealant to deck and joints.',
+    'Wind_Speed_ms':                     '💨 Activate wind speed restrictions. Close bridge to high-sided vehicles.',
+    'Precipitation_mmh':                 '🌧️ Monitor scour around foundations. Clear drainage systems.',
+    'Water_Level_m':                     '🌊 FLOOD ALERT: Monitor scour. Prepare for emergency bridge closure if level rises.',
+    'Structural_Health_Index_SHI':       '🏥 Overall health critical. Schedule comprehensive structural assessment.',
+    'Fatigue_Accumulation_au':           '⏳ Fatigue life nearly exhausted. Restrict heavy loads and plan major rehabilitation.',
+    'Anomaly_Detection_Score':           '🚨 Abnormal behavior detected. Deploy inspection team for immediate on-site assessment.',
+    'Energy_Dissipation_au':             '🔧 Abnormal damping. Inspect damper mechanisms and connection integrity.',
+    'Acoustic_Emissions_levels':         '🔊 Active crack growth detected acoustically. Emergency structural inspection required.',
+}
 
 
 def draw_bridge_diagram(prediction=None, confidence=None):
@@ -175,6 +253,64 @@ def draw_bridge_diagram(prediction=None, confidence=None):
 
     plt.tight_layout()
     return fig
+
+
+def analyze_damage(input_values_dict):
+    """
+    Analyze which features are out of range and by how much.
+    input_values_dict: {feature_name: actual_value}
+    Returns: anomalies list, domain_scores dict, recommendations list
+    """
+    anomalies = []
+    domain_scores = {'Structural': [], 'Dynamic': [], 'Load': [], 'Environmental': [], 'Health': []}
+    
+    for feature, value in input_values_dict.items():
+        if feature not in HEALTHY_THRESHOLDS:
+            continue
+        thresh = HEALTHY_THRESHOLDS[feature]
+        min_val = thresh['min']
+        max_val = thresh['max']
+        domain = thresh['domain']
+        unit = thresh['unit']
+        
+        # Calculate how far out of range (0 = healthy, 1+ = severe)
+        if value < min_val:
+            deviation = (min_val - value) / (max_val - min_val + 1e-9)
+            direction = f"Too LOW ({value:.2f} {unit}, min safe: {min_val} {unit})"
+            severity = min(deviation, 3.0)
+        elif value > max_val:
+            deviation = (value - max_val) / (max_val - min_val + 1e-9)
+            direction = f"Too HIGH ({value:.2f} {unit}, max safe: {max_val} {unit})"
+            severity = min(deviation, 3.0)
+        else:
+            severity = 0.0
+            direction = None
+        
+        domain_scores[domain].append(severity)
+        
+        if severity > 0:
+            anomalies.append({
+                'feature': feature,
+                'value': value,
+                'severity': severity,
+                'direction': direction,
+                'domain': domain,
+                'action': MAINTENANCE_ACTIONS.get(feature, 'Inspect and assess this parameter.'),
+                'severity_label': 'CRITICAL' if severity > 1.5 else 'HIGH' if severity > 0.8 else 'MODERATE'
+            })
+    
+    # Sort anomalies by severity
+    anomalies.sort(key=lambda x: x['severity'], reverse=True)
+    
+    # Calculate domain scores (average severity per domain)
+    domain_summary = {}
+    for domain, scores in domain_scores.items():
+        if scores:
+            domain_summary[domain] = min(sum(scores) / len(scores) * 100, 100)
+        else:
+            domain_summary[domain] = 0.0
+    
+    return anomalies, domain_summary
 
 
 @st.cache_resource
@@ -359,114 +495,213 @@ with tab1:
         st.write("Simulate real-time monitoring by entering sensor values manually.")
 
         with st.expander("🎛️ Enter Sensor Values Manually", expanded=False):
-            st.markdown("**Default values simulate poor bridge health conditions:**")
+            st.markdown("Enter your own sensor readings. Healthy ranges are shown for reference.")
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
                 st.markdown("**⚙️ Structural**")
                 Strain_microstrain = st.number_input(
-                    "Strain_microstrain", value=450.0, step=0.1, key="m_strain"
+                    "Strain_microstrain",
+                    value=0.0,
+                    step=0.1,
+                    key="m_strain",
+                    help="Healthy range: 100 – 200 με",
                 )
                 Deflection_mm = st.number_input(
-                    "Deflection_mm", value=18.0, step=0.1, key="m_deflection"
+                    "Deflection_mm",
+                    value=0.0,
+                    step=0.1,
+                    key="m_deflection",
+                    help="Healthy range: 3 – 7 mm",
                 )
                 Crack_Propagation_mm = st.number_input(
-                    "Crack_Propagation_mm", value=3.5, step=0.1, key="m_crack"
+                    "Crack_Propagation_mm",
+                    value=0.0,
+                    step=0.1,
+                    key="m_crack",
+                    help="Healthy range: 0 – 0.2 mm",
                 )
                 Corrosion_Level_percent = st.number_input(
                     "Corrosion_Level_percent",
-                    value=45.0,
+                    value=0.0,
                     step=0.1,
                     key="m_corrosion",
+                    help="Healthy range: 0 – 10 %",
                 )
                 Displacement_mm = st.number_input(
-                    "Displacement_mm", value=12.0, step=0.1, key="m_displacement"
+                    "Displacement_mm",
+                    value=0.0,
+                    step=0.1,
+                    key="m_displacement",
+                    help="Healthy range: 1 – 4 mm",
                 )
 
                 st.markdown("**📳 Dynamic**")
                 Vibration_ms2 = st.number_input(
-                    "Vibration_ms2", value=4.5, step=0.1, key="m_vibration"
+                    "Vibration_ms2",
+                    value=0.0,
+                    step=0.1,
+                    key="m_vibration",
+                    help="Healthy range: 0.3 – 0.8 m/s²",
                 )
                 Tilt_deg = st.number_input(
-                    "Tilt_deg", value=2.8, step=0.1, key="m_tilt"
+                    "Tilt_deg",
+                    value=0.0,
+                    step=0.1,
+                    key="m_tilt",
+                    help="Healthy range: 0 – 0.3 °",
                 )
                 Modal_Frequency_Hz = st.number_input(
-                    "Modal_Frequency_Hz", value=6.0, step=0.1, key="m_modal"
+                    "Modal_Frequency_Hz",
+                    value=0.0,
+                    step=0.1,
+                    key="m_modal",
+                    help="Healthy range: 12 – 18 Hz",
                 )
                 Seismic_Activity_ms2 = st.number_input(
-                    "Seismic_Activity_ms2", value=0.08, step=0.01, key="m_seismic"
+                    "Seismic_Activity_ms2",
+                    value=0.0,
+                    step=0.01,
+                    key="m_seismic",
+                    help="Healthy range: 0 – 0.02 m/s²",
                 )
                 Bearing_Joint_Forces_kN = st.number_input(
-                    "Bearing_Joint_Forces_kN", value=520.0, step=0.1, key="m_bearing"
+                    "Bearing_Joint_Forces_kN",
+                    value=0.0,
+                    step=0.1,
+                    key="m_bearing",
+                    help="Healthy range: 150 – 250 kN",
                 )
 
             with col2:
                 st.markdown("**🚛 Load**")
                 Vehicle_Load_tons = st.number_input(
-                    "Vehicle_Load_tons", value=38.0, step=0.1, key="m_vehicle"
+                    "Vehicle_Load_tons",
+                    value=0.0,
+                    step=0.1,
+                    key="m_vehicle",
+                    help="Healthy range: 5 – 15 tons",
                 )
                 Traffic_Volume_vph = st.number_input(
-                    "Traffic_Volume_vph", value=1800.0, step=1.0, key="m_traffic"
+                    "Traffic_Volume_vph",
+                    value=0.0,
+                    step=1.0,
+                    key="m_traffic",
+                    help="Healthy range: 200 – 700 vph",
                 )
                 Axle_Counts_pmin = st.number_input(
-                    "Axle_Counts_pmin", value=85.0, step=0.1, key="m_axle"
+                    "Axle_Counts_pmin",
+                    value=0.0,
+                    step=0.1,
+                    key="m_axle",
+                    help="Healthy range: 10 – 30 /min",
                 )
                 Impact_Events_g = st.number_input(
-                    "Impact_Events_g", value=2.1, step=0.1, key="m_impact"
+                    "Impact_Events_g",
+                    value=0.0,
+                    step=0.1,
+                    key="m_impact",
+                    help="Healthy range: 0 – 0.5 g",
                 )
                 Dynamic_Load_Distribution_percent = st.number_input(
                     "Dynamic_Load_Distribution_percent",
-                    value=88.0,
+                    value=0.0,
                     step=0.1,
                     key="m_dynload",
+                    help="Healthy range: 40 – 60 %",
                 )
 
                 st.markdown("**🌤️ Environmental**")
                 Temperature_C = st.number_input(
-                    "Temperature_C", value=42.0, step=0.1, key="m_temp"
+                    "Temperature_C",
+                    value=0.0,
+                    step=0.1,
+                    key="m_temp",
+                    help="Healthy range: 10 – 35 °C",
                 )
                 Humidity_percent = st.number_input(
-                    "Humidity_percent", value=95.0, step=0.1, key="m_humidity"
+                    "Humidity_percent",
+                    value=0.0,
+                    step=0.1,
+                    key="m_humidity",
+                    help="Healthy range: 40 – 75 %",
                 )
                 Wind_Speed_ms = st.number_input(
-                    "Wind_Speed_ms", value=28.0, step=0.1, key="m_wind"
+                    "Wind_Speed_ms",
+                    value=0.0,
+                    step=0.1,
+                    key="m_wind",
+                    help="Healthy range: 0 – 10 m/s",
                 )
                 Precipitation_mmh = st.number_input(
-                    "Precipitation_mmh", value=18.0, step=0.1, key="m_precip"
+                    "Precipitation_mmh",
+                    value=0.0,
+                    step=0.1,
+                    key="m_precip",
+                    help="Healthy range: 0 – 5 mm/h",
                 )
                 Water_Level_m = st.number_input(
-                    "Water_Level_m", value=7.5, step=0.1, key="m_water"
+                    "Water_Level_m",
+                    value=0.0,
+                    step=0.1,
+                    key="m_water",
+                    help="Healthy range: 1 – 4 m",
                 )
 
             with col3:
                 st.markdown("**💗 Health**")
                 Structural_Health_Index_SHI = st.number_input(
                     "Structural_Health_Index_SHI",
-                    value=22.0,
+                    value=0.0,
                     step=0.1,
                     key="m_shi",
+                    help="Healthy range: 70 – 100 (higher is better)",
                 )
                 Fatigue_Accumulation_au = st.number_input(
-                    "Fatigue_Accumulation_au", value=0.92, step=0.01, key="m_fatigue"
+                    "Fatigue_Accumulation_au",
+                    value=0.0,
+                    step=0.01,
+                    key="m_fatigue",
+                    help="Healthy range: 0 – 0.3 au",
                 )
                 Anomaly_Detection_Score = st.number_input(
                     "Anomaly_Detection_Score",
-                    value=0.88,
+                    value=0.0,
                     step=0.01,
                     key="m_anomaly",
+                    help="Healthy range: 0 – 0.2 (lower is better)",
                 )
                 Energy_Dissipation_au = st.number_input(
-                    "Energy_Dissipation_au", value=0.95, step=0.01, key="m_energy"
+                    "Energy_Dissipation_au",
+                    value=0.0,
+                    step=0.01,
+                    key="m_energy",
+                    help="Healthy range: 0.1 – 0.4 au",
                 )
                 Acoustic_Emissions_levels = st.number_input(
                     "Acoustic_Emissions_levels",
-                    value=95.0,
+                    value=0.0,
                     step=0.1,
                     key="m_acoustic",
+                    help="Healthy range: 10 – 30 dB",
                 )
 
             if st.button("🔍 Run Prediction on Manual Input", key="manual_predict_btn"):
+                # region agent log
+                _append_debug_log(
+                    "H2",
+                    "dashboard/app.py:manual_predict_button",
+                    "button_clicked_manual_prediction",
+                    {
+                        "Strain_microstrain": Strain_microstrain,
+                        "Deflection_mm": Deflection_mm,
+                        "Crack_Propagation_mm": Crack_Propagation_mm,
+                        "Corrosion_Level_percent": Corrosion_Level_percent,
+                        "Structural_Health_Index_SHI": Structural_Health_Index_SHI,
+                    },
+                )
+                # endregion
                 manual_row = np.array(
                     [[
                         Strain_microstrain, Deflection_mm, Crack_Propagation_mm,
@@ -485,10 +720,96 @@ with tab1:
                 )
 
                 with st.spinner("Running GCN prediction..."):
+                    # region agent log
+                    _append_debug_log(
+                        "H2",
+                        "dashboard/app.py:manual_spinner_start",
+                        "manual_computation_start",
+                        {},
+                    )
+                    # endregion
                     df_full_manual = _load_full_dataset()
                     scaler_manual = _fit_scaler(df_full_manual)
                     row_scaled_manual = scaler_manual.transform(manual_row)[0]
                     pred_manual, conf_manual = _run_gcn(gcn, row_scaled_manual)
+                    # region agent log
+                    _append_debug_log(
+                        "H1",
+                        "dashboard/app.py:manual_pred_conf",
+                        "manual_pred_and_conf_ready",
+                        {"pred_manual": pred_manual, "conf_manual": conf_manual},
+                    )
+                    # endregion
+
+                    # region agent log
+                    manual_input_check = {
+                        "Strain_microstrain": Strain_microstrain,
+                        "Deflection_mm": Deflection_mm,
+                        "Crack_Propagation_mm": Crack_Propagation_mm,
+                        "Corrosion_Level_percent": Corrosion_Level_percent,
+                        "Vibration_ms2": Vibration_ms2,
+                        "Tilt_deg": Tilt_deg,
+                        "Modal_Frequency_Hz": Modal_Frequency_Hz,
+                        "Vehicle_Load_tons": Vehicle_Load_tons,
+                        "Structural_Health_Index_SHI": Structural_Health_Index_SHI,
+                        "Fatigue_Accumulation_au": Fatigue_Accumulation_au,
+                        "Anomaly_Detection_Score": Anomaly_Detection_Score,
+                    }
+                    ood_flags = []
+                    for feat, val in manual_input_check.items():
+                        col_mean = df_full_manual[feat].mean()
+                        col_std = df_full_manual[feat].std()
+                        z_score = abs(val - col_mean) / (col_std + 1e-9)
+                        if z_score > 4.0:
+                            ood_flags.append(feat)
+
+                    critical_count = None
+                    if len(ood_flags) >= 3:
+                        ood_input = {
+                            "Strain_microstrain": Strain_microstrain,
+                            "Deflection_mm": Deflection_mm,
+                            "Crack_Propagation_mm": Crack_Propagation_mm,
+                            "Corrosion_Level_percent": Corrosion_Level_percent,
+                            "Displacement_mm": Displacement_mm,
+                            "Vibration_ms2": Vibration_ms2,
+                            "Tilt_deg": Tilt_deg,
+                            "Modal_Frequency_Hz": Modal_Frequency_Hz,
+                            "Seismic_Activity_ms2": Seismic_Activity_ms2,
+                            "Bearing_Joint_Forces_kN": Bearing_Joint_Forces_kN,
+                            "Vehicle_Load_tons": Vehicle_Load_tons,
+                            "Traffic_Volume_vph": Traffic_Volume_vph,
+                            "Axle_Counts_pmin": Axle_Counts_pmin,
+                            "Impact_Events_g": Impact_Events_g,
+                            "Dynamic_Load_Distribution_percent": Dynamic_Load_Distribution_percent,
+                            "Temperature_C": Temperature_C,
+                            "Humidity_percent": Humidity_percent,
+                            "Wind_Speed_ms": Wind_Speed_ms,
+                            "Precipitation_mmh": Precipitation_mmh,
+                            "Water_Level_m": Water_Level_m,
+                            "Structural_Health_Index_SHI": Structural_Health_Index_SHI,
+                            "Fatigue_Accumulation_au": Fatigue_Accumulation_au,
+                            "Anomaly_Detection_Score": Anomaly_Detection_Score,
+                            "Energy_Dissipation_au": Energy_Dissipation_au,
+                            "Acoustic_Emissions_levels": Acoustic_Emissions_levels,
+                        }
+                        anomalies_ood, _ = analyze_damage(ood_input)
+                        critical_count = sum(
+                            1
+                            for a in anomalies_ood
+                            if a["severity_label"] == "CRITICAL"
+                        )
+
+                    _append_debug_log(
+                        "H1",
+                        "dashboard/app.py:manual_ood_flags_eval",
+                        "manual_ood_flags_and_critical_count",
+                        {
+                            "ood_flags_len": len(ood_flags),
+                            "ood_flags_first3": ood_flags[:3],
+                            "critical_count": critical_count,
+                        },
+                    )
+                    # endregion
                     shi_manual = float(np.clip(row_scaled_manual[20] * 20.0 + 85.0, 0.0, 100.0))
                     conf_pct_manual = conf_manual * 100.0
 
@@ -516,6 +837,118 @@ with tab1:
                             unsafe_allow_html=True,
                         )
                         st.error("⚠️ Critical Alert: Bridge requires immediate inspection!")
+
+                        if pred_manual == 1:
+                            st.divider()
+                            st.subheader("🔬 Damage Analysis & Maintenance Recommendations")
+                            
+                            # Build input dict from manual values
+                            manual_input_dict = {
+                                'Strain_microstrain': Strain_microstrain,
+                                'Deflection_mm': Deflection_mm,
+                                'Crack_Propagation_mm': Crack_Propagation_mm,
+                                'Corrosion_Level_percent': Corrosion_Level_percent,
+                                'Displacement_mm': Displacement_mm,
+                                'Vibration_ms2': Vibration_ms2,
+                                'Tilt_deg': Tilt_deg,
+                                'Modal_Frequency_Hz': Modal_Frequency_Hz,
+                                'Seismic_Activity_ms2': Seismic_Activity_ms2,
+                                'Bearing_Joint_Forces_kN': Bearing_Joint_Forces_kN,
+                                'Vehicle_Load_tons': Vehicle_Load_tons,
+                                'Traffic_Volume_vph': Traffic_Volume_vph,
+                                'Axle_Counts_pmin': Axle_Counts_pmin,
+                                'Impact_Events_g': Impact_Events_g,
+                                'Dynamic_Load_Distribution_percent': Dynamic_Load_Distribution_percent,
+                                'Temperature_C': Temperature_C,
+                                'Humidity_percent': Humidity_percent,
+                                'Wind_Speed_ms': Wind_Speed_ms,
+                                'Precipitation_mmh': Precipitation_mmh,
+                                'Water_Level_m': Water_Level_m,
+                                'Structural_Health_Index_SHI': Structural_Health_Index_SHI,
+                                'Fatigue_Accumulation_au': Fatigue_Accumulation_au,
+                                'Anomaly_Detection_Score': Anomaly_Detection_Score,
+                                'Energy_Dissipation_au': Energy_Dissipation_au,
+                                'Acoustic_Emissions_levels': Acoustic_Emissions_levels,
+                            }
+                            
+                            anomalies, domain_summary = analyze_damage(manual_input_dict)
+                            
+                            # Domain severity radar chart
+                            st.markdown("#### 🗺️ Domain Severity Map")
+                            fig_domain = go.Figure(go.Scatterpolar(
+                                r=list(domain_summary.values()),
+                                theta=list(domain_summary.keys()),
+                                fill='toself',
+                                fillcolor='rgba(255, 50, 50, 0.3)',
+                                line=dict(color='red', width=2),
+                                name='Damage Severity'
+                            ))
+                            fig_domain.update_layout(
+                                polar=dict(radialaxis=dict(range=[0, 100], visible=True)),
+                                title="Domain Damage Severity (0=Healthy, 100=Critical)",
+                                height=400,
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig_domain, use_container_width=True, key="domain_severity_radar")
+                            
+                            # Domain score cards
+                            st.markdown("#### 📊 Severity by Domain")
+                            d_cols = st.columns(5)
+                            domain_colors = {
+                                'Structural': '🔩', 'Dynamic': '📳', 
+                                'Load': '🚛', 'Environmental': '🌤️', 'Health': '💗'
+                            }
+                            for i, (domain, score) in enumerate(domain_summary.items()):
+                                with d_cols[i]:
+                                    color = "🔴" if score > 60 else "🟡" if score > 30 else "🟢"
+                                    st.metric(
+                                        label=f"{domain_colors[domain]} {domain}",
+                                        value=f"{color} {score:.0f}%",
+                                        delta="CRITICAL" if score > 60 else "HIGH" if score > 30 else "OK"
+                                    )
+                            
+                            st.divider()
+                            
+                            # Anomalous features table
+                            if anomalies:
+                                st.markdown("#### ⚠️ Parameters Out of Safe Range")
+                                
+                                # Show top anomalies as colored cards
+                                for anomaly in anomalies[:8]:  # show top 8
+                                    sev = anomaly['severity_label']
+                                    bg_color = "#5c0000" if sev == "CRITICAL" else "#5c3300" if sev == "HIGH" else "#3d3d00"
+                                    border_color = "#ff0000" if sev == "CRITICAL" else "#ff8800" if sev == "HIGH" else "#cccc00"
+                                    
+                                    st.markdown(f"""
+                                    <div style="background:{bg_color};border-left:4px solid {border_color};
+                                    padding:12px 16px;border-radius:6px;margin:6px 0;">
+                                    <span style="color:{border_color};font-weight:bold;font-size:14px;">
+                                    [{sev}] {anomaly['feature']} — {anomaly['direction']}</span><br>
+                                    <span style="color:#dddddd;font-size:13px;">🔧 {anomaly['action']}</span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                
+                                st.divider()
+                                
+                                # Priority action table
+                                st.markdown("#### 📋 Maintenance Priority Report")
+                                report_data = []
+                                for i, a in enumerate(anomalies[:10], 1):
+                                    report_data.append({
+                                        'Priority': i,
+                                        'Domain': a['domain'],
+                                        'Parameter': a['feature'],
+                                        'Status': a['direction'],
+                                        'Severity': a['severity_label'],
+                                        'Recommended Action': a['action']
+                                    })
+                                st.dataframe(
+                                    pd.DataFrame(report_data),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                            else:
+                                st.info("All individual parameters are within safe ranges. The GCN detected damage from the combination of sensor readings.")
 
                 with right_m:
                     fig_manual_gauge = go.Figure(
