@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 import sys
+import time
+import warnings
 from pathlib import Path
 from typing import Dict, Tuple
+
+# Silence sklearn's noisy "invalid value encountered in divide" RuntimeWarnings.
+# These come from StandardScaler's incremental mean/var on chunks containing NaN
+# rows; the final fit is correct after fillna, so the warnings are cosmetic.
+warnings.filterwarnings(
+    "ignore", category=RuntimeWarning, module=r"sklearn\.utils\.extmath"
+)
 
 # Allow running this file directly via: `python3 src/train.py`
 # When executed this way, Python does not treat `src/` as an installed package,
@@ -164,21 +173,35 @@ def train_gcn(
     device: torch.device,
 ) -> BridgeGCN:
     """
-    Train a BridgeGCN for 100 epochs and print progress every 10 epochs.
+    Train a BridgeGCN with class-weighted loss. Prints per-epoch progress.
     """
+    print(f"[GCN] Building {len(X_train):,} train graphs and {len(X_test):,} test graphs...", flush=True)
+    t0 = time.time()
     # Convert each row into a graph Data object.
     train_graphs = [build_graph(row, int(lbl)) for row, lbl in zip(X_train, y_train)]
     test_graphs = [build_graph(row, int(lbl)) for row, lbl in zip(X_test, y_test)]
+    print(f"[GCN] Built graphs in {time.time()-t0:.1f}s. Creating DataLoaders...", flush=True)
 
     # Use torch_geometric DataLoader to batch multiple graphs.
-    train_loader = GeoDataLoader(train_graphs, batch_size=32, shuffle=True)
-    test_loader = GeoDataLoader(test_graphs, batch_size=32, shuffle=False)
+    train_loader = GeoDataLoader(train_graphs, batch_size=128, shuffle=True)
+    test_loader = GeoDataLoader(test_graphs, batch_size=128, shuffle=False)
 
     model = BridgeGCN().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
-    criterion = nn.CrossEntropyLoss()
 
-    for epoch in range(1, 101):
+    # Class-balanced weights (sklearn "balanced" formulation): n_samples / (n_classes * count_c).
+    # Maintenance_Alert is ~99.4% / 0.6% imbalanced, so without weighting the model collapses
+    # to always predicting 0. These weights up-weight the rare "damaged" class.
+    _classes, _counts = np.unique(y_train, return_counts=True)
+    _n_samples = y_train.shape[0]
+    _n_classes = len(_classes)
+    _class_weights = _n_samples / (_n_classes * _counts.astype(np.float32))
+    class_weights_t = torch.tensor(_class_weights, dtype=torch.float32, device=device)
+    print(f"[GCN] class weights: {dict(zip(_classes.tolist(), _class_weights.tolist()))}", flush=True)
+    criterion = nn.CrossEntropyLoss(weight=class_weights_t)
+    print("[GCN] Starting training (30 epochs)...", flush=True)
+
+    for epoch in range(1, 31):
         model.train()
         epoch_loss = 0.0
         correct = 0
@@ -206,12 +229,12 @@ def train_gcn(
         train_acc = correct / max(total, 1)
         test_acc = _eval_gcn(model, test_loader, device)
 
-        # Print progress every 10 epochs as requested.
-        if epoch % 10 == 0:
-            print(
-                f"[GCN] Epoch {epoch:03d} | Train Loss: {train_loss:.4f} | "
-                f"Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}"
-            )
+        # Print every epoch so users can see training is alive.
+        print(
+            f"[GCN] Epoch {epoch:03d} | Train Loss: {train_loss:.4f} | "
+            f"Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}",
+            flush=True,
+        )
 
     return model
 
@@ -240,8 +263,9 @@ def train_cnn(
     device: torch.device,
 ) -> BridgeCNN:
     """
-    Train a BridgeCNN for 100 epochs and print progress every 10 epochs.
+    Train a BridgeCNN with class-weighted loss. Prints per-epoch progress.
     """
+    print(f"[CNN] Preparing tensors for {len(X_train):,} train rows...", flush=True)
     # Convert numpy arrays into torch tensors.
     X_train_t = torch.tensor(X_train, dtype=torch.float32)
     y_train_t = torch.tensor(y_train, dtype=torch.long)
@@ -250,17 +274,26 @@ def train_cnn(
 
     # Use TensorDataset + DataLoader for mini-batching.
     train_loader = TorchDataLoader(
-        TensorDataset(X_train_t, y_train_t), batch_size=32, shuffle=True
+        TensorDataset(X_train_t, y_train_t), batch_size=128, shuffle=True
     )
     test_loader = TorchDataLoader(
-        TensorDataset(X_test_t, y_test_t), batch_size=32, shuffle=False
+        TensorDataset(X_test_t, y_test_t), batch_size=128, shuffle=False
     )
 
     model = BridgeCNN().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    criterion = nn.CrossEntropyLoss()
 
-    for epoch in range(1, 101):
+    # Same class-balanced weighting as the GCN, for the same reason.
+    _classes, _counts = np.unique(y_train, return_counts=True)
+    _n_samples = y_train.shape[0]
+    _n_classes = len(_classes)
+    _class_weights = _n_samples / (_n_classes * _counts.astype(np.float32))
+    class_weights_t = torch.tensor(_class_weights, dtype=torch.float32, device=device)
+    print(f"[CNN] class weights: {dict(zip(_classes.tolist(), _class_weights.tolist()))}", flush=True)
+    criterion = nn.CrossEntropyLoss(weight=class_weights_t)
+    print("[CNN] Starting training (30 epochs)...", flush=True)
+
+    for epoch in range(1, 31):
         model.train()
         epoch_loss = 0.0
         correct = 0
@@ -290,12 +323,11 @@ def train_cnn(
         train_acc = correct / max(total, 1)
         test_acc = _eval_cnn(model, test_loader, device)
 
-        # Print progress every 10 epochs as requested.
-        if epoch % 10 == 0:
-            print(
-                f"[CNN] Epoch {epoch:03d} | Train Loss: {train_loss:.4f} | "
-                f"Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}"
-            )
+        print(
+            f"[CNN] Epoch {epoch:03d} | Train Loss: {train_loss:.4f} | "
+            f"Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}",
+            flush=True,
+        )
 
     return model
 
@@ -408,7 +440,9 @@ def main() -> None:
     # DATA LOADING + SPLIT
     # -----------------------------
     # Load X/y using exactly the 25 specified columns (in the required order).
+    print("Loading dataset and scaling features...", flush=True)
     X, y = _load_xy_with_fixed_schema(DATASET_CSV_PATH)
+    print(f"Loaded X shape={X.shape}, y class counts={dict(zip(*np.unique(y, return_counts=True)))}", flush=True)
 
     # Stratified 80/20 train-test split to preserve class balance.
     X_train, X_test, y_train, y_test = train_test_split(

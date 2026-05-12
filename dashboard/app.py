@@ -395,10 +395,11 @@ with st.sidebar:
     st.markdown("### 🧠 Model Performance")
     a, b = st.columns(2)
     c, d = st.columns(2)
-    a.metric("GCN Accuracy", "99.92%")
-    b.metric("GCN F1", "0.929")
-    c.metric("CNN Accuracy", "99.95%")
-    d.metric("CNN F1", "0.959")
+    a.metric("GCN Accuracy", "99.80%")
+    b.metric("GCN F1", "0.857")
+    c.metric("CNN Accuracy", "99.80%")
+    d.metric("CNN F1", "0.857")
+    st.caption("Class-weighted training on imbalanced labels — Recall = 1.00 on the damaged class.")
     st.divider()
     st.info(
         "Graph Convolutional Networks model the bridge as a graph "
