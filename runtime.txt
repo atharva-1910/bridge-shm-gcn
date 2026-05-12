@@ -1,0 +1,3 @@
+# Streamlit Community Cloud no longer reads runtime.txt.
+# Python version is selected in the app's Advanced settings UI.
+# This file is kept as a no-op for documentation only.

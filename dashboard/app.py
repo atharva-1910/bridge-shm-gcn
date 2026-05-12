@@ -11,6 +11,7 @@ import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.patches as patches 
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
@@ -19,6 +20,7 @@ from src.graph_builder import build_graph
 from src.gcn_model import BridgeGCN
 from src.cnn_baseline import BridgeCNN
 import torch.nn.functional as F
+
 
 
 st.set_page_config(
@@ -57,11 +59,14 @@ FEATURE_COLS = [
 ]
 
 # region agent log
-_DEBUG_LOG_PATH = "/Users/atharva_hemade/Desktop/College/DL/project/.cursor/debug-eadf8e.log"
+# Debug logger is disabled in production. Set BRIDGE_SHM_DEBUG_LOG=<path> locally to re-enable.
+_DEBUG_LOG_PATH = os.environ.get("BRIDGE_SHM_DEBUG_LOG")
 _DEBUG_SESSION_ID = "eadf8e"
 _DEBUG_RUN_ID = "ood_manual_fix_debug_1"
 
 def _append_debug_log(hypothesisId: str, location: str, message: str, data: dict | None = None) -> None:
+    if not _DEBUG_LOG_PATH:
+        return
     payload = {
         "sessionId": _DEBUG_SESSION_ID,
         "runId": _DEBUG_RUN_ID,
@@ -71,8 +76,12 @@ def _append_debug_log(hypothesisId: str, location: str, message: str, data: dict
         "data": data or {},
         "timestamp": int(time.time() * 1000),
     }
-    with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(payload) + "\n")
+    try:
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        # Never let debug logging crash the app
+        pass
 
 # endregion
 
@@ -133,126 +142,156 @@ MAINTENANCE_ACTIONS = {
 }
 
 
+
 def draw_bridge_diagram(prediction=None, confidence=None):
-    """Draw a steel truss suspension bridge with colored sensor nodes."""
-    fig, ax = plt.subplots(1, 1, figsize=(14, 6))
-    ax.set_xlim(0, 14)
-    ax.set_ylim(0, 7)
-    ax.set_facecolor("#1a1a2e")
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.axis("off")
+    fig, ax = plt.subplots(figsize=(16, 7))
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
+    ax.set_xlim(0, 16)
+    ax.set_ylim(0, 7.5)
+    ax.axis('off')
 
-    # --- Water / ground ---
-    ax.add_patch(plt.Rectangle((0, 0), 14, 0.5, color="#0a3d62", alpha=0.85, zorder=1))
-    # water shimmer lines
-    for wx in np.linspace(0.5, 13.5, 18):
-        ax.plot([wx, wx + 0.4], [0.25, 0.25], color="#1e90ff", linewidth=0.8, alpha=0.5, zorder=2)
+    sky_colors = ['#0d1117','#111827','#1a2332','#1e2d42','#1a2d3d']
+    for i, c in enumerate(sky_colors):
+        ax.axhspan(i*7.5/5, (i+1)*7.5/5, color=c, zorder=0)
 
-    # --- Left support pillar ---
-    pillar_pts_l = np.array([[0.7, 0.5], [1.3, 0.5], [1.6, 2.0], [0.4, 2.0]])
-    ax.add_patch(plt.Polygon(pillar_pts_l, color="#4a4a5a", zorder=3))
-    # --- Right support pillar ---
-    pillar_pts_r = np.array([[12.7, 0.5], [13.3, 0.5], [13.6, 2.0], [12.4, 2.0]])
-    ax.add_patch(plt.Polygon(pillar_pts_r, color="#4a4a5a", zorder=3))
+    rng = np.random.default_rng(42)
+    sx = rng.uniform(0.2, 15.8, 60)
+    sy = rng.uniform(4.2, 7.2, 60)
+    ss = rng.uniform(0.5, 2.0, 60)
+    ax.scatter(sx, sy, s=ss, c='white', alpha=0.4, zorder=1)
 
-    # --- Bridge deck ---
-    ax.plot([1.0, 13.0], [2.0, 2.0], color="#888899", linewidth=10,
-            solid_capstyle="round", zorder=4)
-    # road markings
-    for rx in np.linspace(2.5, 12.0, 12):
-        ax.plot([rx, rx + 0.4], [2.0, 2.0], color="#ffff88", linewidth=1.5,
-                alpha=0.6, zorder=5)
+    water_y = np.linspace(0, 16, 300)
+    for layer, (col, alpha, base) in enumerate([
+        ('#0c2340', 1.0, 0.0),
+        ('#0e2d4f', 0.9, 0.3),
+        ('#0f3460', 0.7, 0.55),
+    ]):
+        ax.fill_between(water_y, 0, base + 0.05*np.sin(water_y*3 + layer),
+                        color=col, alpha=alpha, zorder=2)
 
-    # --- Truss diagonals below deck ---
-    truss_color = "#556677"
-    ax.plot([1.0, 13.0], [1.25, 1.25], color=truss_color, linewidth=2, zorder=3)
-    for i in np.linspace(1.0, 12.0, 13):
-        ax.plot([i, i + 0.85], [2.0, 1.25], color=truss_color, linewidth=1.8, zorder=3)
-        ax.plot([i + 0.85, i + 0.85], [1.25, 2.0], color=truss_color, linewidth=1.8, zorder=3)
+    for wx in np.linspace(0.5, 15.5, 22):
+        ax.plot([wx, wx+0.35], [0.28, 0.28], color='#4fc3f7',
+                linewidth=0.6, alpha=0.25, zorder=3)
 
-    # --- Left tower ---
-    ax.plot([2.2, 2.2], [2.0, 5.8], color="#aaaacc", linewidth=6, solid_capstyle="round", zorder=4)
-    ax.plot([1.7, 2.7], [5.8, 5.8], color="#aaaacc", linewidth=5, zorder=4)
-    # tower cross braces
-    for ty in [3.0, 4.0, 5.0]:
-        ax.plot([1.9, 2.5], [ty, ty + 0.5], color="#9999bb", linewidth=1.5, zorder=4)
-        ax.plot([2.5, 1.9], [ty, ty + 0.5], color="#9999bb", linewidth=1.5, zorder=4)
+    for ax_pos, w in [(0.5, 1.8), (13.7, 1.8)]:
+        ab = patches.FancyBboxPatch((ax_pos, 0.0), w, 2.0,
+            boxstyle="round,pad=0.05", fc='#2d3748', ec='#4a5568',
+            linewidth=1.0, zorder=4)
+        ax.add_patch(ab)
+        ax.plot([ax_pos, ax_pos+w], [2.0, 2.0], color='#718096',
+                linewidth=1.5, zorder=5)
 
-    # --- Right tower ---
-    ax.plot([11.8, 11.8], [2.0, 5.8], color="#aaaacc", linewidth=6, solid_capstyle="round", zorder=4)
-    ax.plot([11.3, 12.3], [5.8, 5.8], color="#aaaacc", linewidth=5, zorder=4)
-    for ty in [3.0, 4.0, 5.0]:
-        ax.plot([11.5, 12.1], [ty, ty + 0.5], color="#9999bb", linewidth=1.5, zorder=4)
-        ax.plot([12.1, 11.5], [ty, ty + 0.5], color="#9999bb", linewidth=1.5, zorder=4)
+    deck = patches.FancyBboxPatch((1.1, 1.85), 13.8, 0.38,
+        boxstyle="round,pad=0.04", fc='#374151', ec='#4b5563',
+        linewidth=0.8, zorder=6)
+    ax.add_patch(deck)
+    road = patches.FancyBboxPatch((1.15, 2.0), 13.7, 0.18,
+        boxstyle="round,pad=0.02", fc='#4b5563', ec='none', zorder=7)
+    ax.add_patch(road)
+    for mx in np.linspace(2.0, 14.5, 16):
+        ax.plot([mx, mx+0.45], [2.09, 2.09], color='#fbbf24',
+                linewidth=1.0, alpha=0.55, zorder=8)
 
-    # --- Suspension cables from left tower ---
-    cable_color = "#ccccdd"
-    for cx in [3.0, 4.5, 6.0, 7.5]:
-        ax.plot([2.2, cx], [5.8, 2.0], color=cable_color, linewidth=1.8, alpha=0.75, zorder=4)
+    truss_y = 1.3
+    ax.plot([1.1, 14.9], [truss_y, truss_y], color='#4a5568',
+            linewidth=1.5, zorder=5)
+    for i, tx in enumerate(np.linspace(1.1, 14.0, 24)):
+        col = '#4a5568' if i % 2 == 0 else '#3d4a5c'
+        ax.plot([tx, tx+0.6], [1.85, truss_y], color=col,
+                linewidth=1.2, alpha=0.7, zorder=5)
+        ax.plot([tx+0.6, tx+0.6], [truss_y, 1.85], color=col,
+                linewidth=1.2, alpha=0.7, zorder=5)
 
-    # --- Suspension cables from right tower ---
-    for cx in [7.5, 9.0, 10.5, 12.0]:
-        ax.plot([11.8, cx], [5.8, 2.0], color=cable_color, linewidth=1.8, alpha=0.75, zorder=4)
+    def draw_tower(cx):
+        plinth = patches.FancyBboxPatch((cx-0.22, 1.88), 0.44, 0.25,
+            boxstyle="round,pad=0.02", fc='#4a5568', ec='#a0aec0',
+            linewidth=0.8, zorder=9)
+        ax.add_patch(plinth)
+        for side in [-0.11, 0.07]:
+            shaft = patches.FancyBboxPatch((cx+side, 2.1), 0.10, 3.9,
+                boxstyle="round,pad=0.01", fc='#8892a4', ec='#a0aec0',
+                linewidth=0.6, zorder=9)
+            ax.add_patch(shaft)
+        for by in [2.8, 3.6, 4.4, 5.2]:
+            ax.plot([cx-0.11, cx+0.17], [by, by+0.35], color='#a0aec0',
+                    linewidth=0.9, alpha=0.6, zorder=10)
+            ax.plot([cx+0.17, cx-0.11], [by, by+0.35], color='#a0aec0',
+                    linewidth=0.9, alpha=0.6, zorder=10)
+        crossbeam = patches.FancyBboxPatch((cx-0.22, 5.85), 0.44, 0.18,
+            boxstyle="round,pad=0.02", fc='#a0aec0', ec='#cbd5e0',
+            linewidth=0.8, zorder=11)
+        ax.add_patch(crossbeam)
+        from matplotlib.patches import Wedge
+        saddle = Wedge((cx+0.03, 6.05), 0.15, 0, 180,
+            fc='#64748b', ec='#a0aec0', linewidth=0.8, zorder=12)
+        ax.add_patch(saddle)
 
-    # --- Sensor node colors ---
-    if prediction == 1:  # DAMAGED
-        nc = {
-            "structural": "#ff3333",
-            "dynamic":    "#ff3333",
-            "load":       "#ff8800",
-            "env":        "#44cc44",
-            "health":     "#ff3333",
-        }
-        glow = "#ff0000"
-    else:  # HEALTHY or no prediction
-        nc = {
-            "structural": "#22cc55",
-            "dynamic":    "#22cc55",
-            "load":       "#22cc55",
-            "env":        "#22cc55",
-            "health":     "#22cc55",
-        }
-        glow = "#00ff88"
+    draw_tower(2.8)
+    draw_tower(13.2)
 
-    def draw_sensor(x, y, color, label, icon, key_offset=0):
-        # glow ring
-        ax.plot(x, y, "o", markersize=30, color=color, alpha=0.2, zorder=6)
-        # main dot
-        ax.plot(x, y, "o", markersize=20, color=color,
-                markeredgecolor="white", markeredgewidth=2.0, zorder=7)
-        # icon text inside dot
-        ax.text(x, y, icon, fontsize=9, ha="center", va="center",
-                color="white", fontweight="bold", zorder=8)
-        # label above
-        ax.text(x, y + 0.55, label, color="white", fontsize=8,
-                ha="center", fontweight="bold", zorder=8,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="#1a1a2e",
-                          edgecolor=color, alpha=0.8, linewidth=1.2))
+    def catenary(x0, y0, x1, y1, mid_sag, n=200):
+        t = np.linspace(0, 1, n)
+        x = x0 + t*(x1-x0)
+        y = y0 + t*(y1-y0) - mid_sag*4*t*(1-t)
+        return x, y
 
-    # Node 0 — Structural (left deck area)
-    draw_sensor(3.5, 2.0, nc["structural"], "Structural", "⚙")
-    # Node 1 — Dynamic (center deck)
-    draw_sensor(7.0, 2.0, nc["dynamic"], "Dynamic", "📳")
-    # Node 2 — Load (right deck)
-    draw_sensor(10.0, 2.0, nc["load"], "Load", "🚛")
-    # Node 3 — Environmental (top left tower)
-    draw_sensor(2.2, 5.8, nc["env"], "Environmental", "🌤")
-    # Node 4 — Health (top right tower)
-    draw_sensor(11.8, 5.8, nc["health"], "Health", "💗")
+    for mid_sag, alpha, lw in [(0.85, 1.0, 2.0), (0.72, 0.4, 0.8)]:
+        cx, cy = catenary(2.83, 6.05, 13.23, 6.05, mid_sag)
+        ax.plot(cx, cy, color='#94a3b8', linewidth=lw, alpha=alpha, zorder=8)
 
-    # --- Title ---
-    if prediction is not None:
-        status = "🔴  DAMAGED" if prediction == 1 else "🟢  HEALTHY"
-        conf_str = f"  —  {confidence:.1f}% confident" if confidence else ""
-        title_col = "#ff4444" if prediction == 1 else "#44ee88"
-        ax.set_title(f"Bridge Status: {status}{conf_str}",
-                     color=title_col, fontsize=16, fontweight="bold", pad=10)
+    cx_main, cy_main = catenary(2.83, 6.05, 13.23, 6.05, 0.85)
+    for hx in np.linspace(3.1, 12.9, 20):
+        idx = int((hx - 2.83) / (13.23 - 2.83) * 199)
+        idx = max(0, min(199, idx))
+        hy = cy_main[idx]
+        ax.plot([hx, hx], [2.22, hy], color='#64748b',
+                linewidth=0.7, alpha=0.6, zorder=7)
+
+    def sensor_node(x, y, color, label):
+        for r, a in [(0.32, 0.08), (0.24, 0.15), (0.17, 0.25)]:
+            ax.add_patch(plt.Circle((x, y), r, color=color, alpha=a, zorder=13))
+        ax.add_patch(plt.Circle((x, y), 0.14, color=color, zorder=14))
+        ax.add_patch(plt.Circle((x, y), 0.14, color='white', fill=False,
+                                linewidth=1.4, alpha=0.8, zorder=15))
+        ax.add_patch(plt.Circle((x, y), 0.05, color='white', alpha=0.9, zorder=16))
+        ax.text(x, y+0.42, label, color='white', fontsize=7.5,
+                ha='center', va='bottom', fontweight='bold', zorder=17,
+                bbox=dict(boxstyle="round,pad=0.25", fc='#1a202c',
+                         ec=color, linewidth=1.2, alpha=0.92),
+                fontfamily='monospace')
+
+    if prediction == 1:
+        nc = {'structural':'#ef4444','dynamic':'#ef4444',
+              'load':'#f97316','environmental':'#22c55e','health':'#ef4444'}
     else:
-        ax.set_title("Steel Truss Bridge  —  Live Sensor Domain Monitor",
-                     color="#aaddff", fontsize=14, fontweight="bold", pad=10)
+        nc = {k:'#22c55e' for k in ['structural','dynamic','load','environmental','health']}
 
-    plt.tight_layout()
+    sensor_node(4.2,  2.18, nc['structural'],    'Structural')
+    sensor_node(8.0,  2.18, nc['dynamic'],       'Dynamic')
+    sensor_node(11.2, 2.18, nc['load'],          'Load')
+    sensor_node(2.83, 6.05, nc['environmental'], 'Environmental')
+    sensor_node(13.23,6.05, nc['health'],        'Health')
+
+    for tx in [2.83, 13.23]:
+        ax.plot([tx, tx], [0.0, 0.55], color='#94a3b8',
+                linewidth=0.6, alpha=0.2, zorder=3)
+
+    if prediction is not None:
+        status = 'DAMAGED' if prediction == 1 else 'HEALTHY'
+        conf_str = f'  -  {confidence:.1f}% confident' if confidence else ''
+        title_col = '#f87171' if prediction == 1 else '#4ade80'
+        ax.set_title(f'Bridge Status:  {status}{conf_str}',
+                     color=title_col, fontsize=15, fontweight='bold',
+                     pad=10, fontfamily='monospace')
+    else:
+        ax.set_title('Steel Truss Bridge  -  Live Sensor Domain Monitor',
+                     color='#93c5fd', fontsize=13, fontweight='bold',
+                     pad=10, fontfamily='monospace')
+
+    plt.tight_layout(pad=0.5)
     return fig
+
 
 
 def analyze_damage(input_values_dict):
