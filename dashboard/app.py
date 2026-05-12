@@ -772,6 +772,53 @@ with tab1:
                     scaler_manual = _fit_scaler(df_full_manual)
                     row_scaled_manual = scaler_manual.transform(manual_row)[0]
                     pred_manual, conf_manual = _run_gcn(gcn, row_scaled_manual)
+
+                    # ── Rule-based safety override ───────────────────────────
+                    # The GCN is reliable on in-distribution inputs but can be
+                    # over-confident on out-of-distribution manual entries
+                    # (training data Modal_Freq ∈ [12, 18] Hz — a user typing
+                    # 12376 Hz is far outside what the model has ever seen).
+                    # As a safety check, evaluate the same input against the
+                    # documented HEALTHY_THRESHOLDS; if 2+ critical violations
+                    # are detected, override the prediction to DAMAGED.
+                    manual_input_dict_pre = {
+                        'Strain_microstrain': Strain_microstrain,
+                        'Deflection_mm': Deflection_mm,
+                        'Crack_Propagation_mm': Crack_Propagation_mm,
+                        'Corrosion_Level_percent': Corrosion_Level_percent,
+                        'Displacement_mm': Displacement_mm,
+                        'Vibration_ms2': Vibration_ms2,
+                        'Tilt_deg': Tilt_deg,
+                        'Modal_Frequency_Hz': Modal_Frequency_Hz,
+                        'Seismic_Activity_ms2': Seismic_Activity_ms2,
+                        'Bearing_Joint_Forces_kN': Bearing_Joint_Forces_kN,
+                        'Vehicle_Load_tons': Vehicle_Load_tons,
+                        'Traffic_Volume_vph': Traffic_Volume_vph,
+                        'Axle_Counts_pmin': Axle_Counts_pmin,
+                        'Impact_Events_g': Impact_Events_g,
+                        'Dynamic_Load_Distribution_percent': Dynamic_Load_Distribution_percent,
+                        'Temperature_C': Temperature_C,
+                        'Humidity_percent': Humidity_percent,
+                        'Wind_Speed_ms': Wind_Speed_ms,
+                        'Precipitation_mmh': Precipitation_mmh,
+                        'Water_Level_m': Water_Level_m,
+                        'Structural_Health_Index_SHI': Structural_Health_Index_SHI,
+                        'Fatigue_Accumulation_au': Fatigue_Accumulation_au,
+                        'Anomaly_Detection_Score': Anomaly_Detection_Score,
+                        'Energy_Dissipation_au': Energy_Dissipation_au,
+                        'Acoustic_Emissions_levels': Acoustic_Emissions_levels,
+                    }
+                    _anomalies_pre, _ = analyze_damage(manual_input_dict_pre)
+                    _critical_n = sum(1 for a in _anomalies_pre if a['severity_label'] == 'CRITICAL')
+                    _high_n = sum(1 for a in _anomalies_pre if a['severity_label'] == 'HIGH')
+                    manual_rule_override = False
+                    if _critical_n >= 2 or (_critical_n + _high_n) >= 5:
+                        pred_manual = 1
+                        # Rule-derived confidence climbs with the number of
+                        # critical/high violations; capped at 99%.
+                        rule_conf = min(0.99, 0.70 + 0.04 * (_critical_n + _high_n))
+                        conf_manual = max(conf_manual, rule_conf)
+                        manual_rule_override = True
                     # region agent log
                     _append_debug_log(
                         "H1",
@@ -852,6 +899,14 @@ with tab1:
                     # endregion
                     shi_manual = float(np.clip(row_scaled_manual[20] * 20.0 + 85.0, 0.0, 100.0))
                     conf_pct_manual = conf_manual * 100.0
+
+                if manual_rule_override:
+                    st.warning(
+                        f"⚠️ **Rule-based safety override active.** "
+                        f"{_critical_n} CRITICAL and {_high_n} HIGH threshold violations "
+                        f"detected — prediction overridden to DAMAGED. "
+                        f"(GCN alone may be unreliable on inputs far outside its training distribution.)"
+                    )
 
                 manual_bridge = draw_bridge_diagram(prediction=pred_manual, confidence=conf_pct_manual)
                 st.pyplot(manual_bridge, use_container_width=True)
